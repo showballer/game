@@ -1,508 +1,574 @@
 "use client"
 
-import type React from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import Script from "next/script"
+import {
+  AlertTriangle,
+  Award,
+  CheckCircle2,
+  Compass,
+  Droplets,
+  Flame,
+  Home,
+  Shield,
+  Sparkles,
+  Star,
+  PhoneCall,
+  Video,
+  XCircle,
+} from "lucide-react"
 
-import { useState, useEffect } from "react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Trophy, Star, Home, AlertTriangle, CheckCircle2, XCircle, Phone, Flame, Droplets, Hand } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Progress } from "@/components/ui/progress"
 
-type GameState = "welcome" | "map" | "playing" | "complete"
-type FeedbackType = "correct" | "incorrect" | null
+const HOUSE_MODEL_URL =
+  "https://mweb-showballer.oss-cn-shanghai.aliyuncs.com/%E6%96%87%E6%A1%A3/fangzi.glb"
 
-interface DragItem {
+type GameState = "welcome" | "explore" | "complete"
+
+type HazardOption = {
   id: string
-  icon: React.ReactNode
   label: string
-}
-
-interface Scenario {
-  id: number
-  title: string
   description: string
-  room: string
-  instruction: string
-  dragItems: DragItem[]
-  correctItemId: string
-  correctFeedback: string
-  incorrectFeedback: string
-  safetyTip: string
-  bgColor: string
 }
 
-const scenarios: Scenario[] = [
+type Hazard = {
+  id: string
+  room: string
+  title: string
+  question: string
+  story: string
+  tip: string
+  icon: ReactNode
+  options: HazardOption[]
+  correctOptionId: string
+  position: string
+  normal: string
+}
+
+type FeedbackState = {
+  type: "correct" | "incorrect"
+  message: string
+  detail: string
+  starsEarned?: number
+}
+
+const hazards: Hazard[] = [
   {
-    id: 1,
-    title: "陌生人敲门",
-    description: "你一个人在家，突然听到门外有陌生人敲门...",
+    id: "door-safety",
     room: "玄关",
-    instruction: "拖动正确的物品到场景中来保护自己！",
-    dragItems: [
-      { id: "phone", icon: <Phone className="w-8 h-8" />, label: "打电话给家长" },
-      { id: "door", icon: <Home className="w-8 h-8" />, label: "直接开门" },
+    title: "陌生人敲门怎么办？",
+    story: "你一个人在家，门铃突然响了，对方说要进屋检查水电……",
+    question: "此时你应该怎么做最安全？",
+    tip: "先确认身份，再联系可信的大人，拒绝贸然开门。",
+    icon: <Home className="h-6 w-6 text-sky-600" />, 
+    options: [
+      {
+        id: "verify",
+        label: "使用可视门铃确认并立刻联系家长",
+        description: "通过门口摄像头观察，并拨打家长电话确认是否需要开门。",
+      },
+      {
+        id: "open",
+        label: "相信对方立即开门",
+        description: "即使对方穿着工作服，也可能是假冒的陌生人。",
+      },
     ],
-    correctItemId: "phone",
-    correctFeedback: "太棒了！遇到陌生人一定要先联系家长！",
-    incorrectFeedback: "危险！不能随便给陌生人开门！",
-    safetyTip: "独自在家时，不要给陌生人开门，可以通过猫眼观察或联系家长。",
-    bgColor: "from-blue-100 to-blue-200",
+    correctOptionId: "verify",
+    position: "1.1 1.4 3.2",
+    normal: "0 1 -1",
   },
   {
-    id: 2,
-    title: "厨房燃气泄漏",
-    description: "你发现厨房的燃气灶还开着，火焰很大...",
+    id: "kitchen-fire",
     room: "厨房",
-    instruction: "快速拖动正确的操作来避免危险！",
-    dragItems: [
-      { id: "valve", icon: <Flame className="w-8 h-8" />, label: "关闭燃气阀门" },
-      { id: "ignore", icon: <XCircle className="w-8 h-8" />, label: "不管它" },
+    title: "灶台突然冒烟",
+    story: "你闻到厨房有浓浓的煤气味，锅里还冒着火焰。",
+    question: "为了保护自己和家人，第一步应该做什么？",
+    tip: "先关闭火源和燃气阀，再呼叫家长或119。",
+    icon: <Flame className="h-6 w-6 text-orange-600" />, 
+    options: [
+      {
+        id: "close-valve",
+        label: "关掉燃气阀门并打开窗户通风",
+        description: "立刻关闭灶台并保持距离，避免火势扩大。",
+      },
+      {
+        id: "water",
+        label: "倒一盆水直接浇到火上",
+        description: "油火遇水会四处飞溅，更容易引发危险。",
+      },
     ],
-    correctItemId: "valve",
-    correctFeedback: "做得好！及时关闭燃气可以避免火灾！",
-    incorrectFeedback: "危险！燃气灶无人看管很危险！",
-    safetyTip: "使用燃气后要及时关闭，离开厨房前检查所有火源是否关闭。",
-    bgColor: "from-orange-100 to-red-200",
+    correctOptionId: "close-valve",
+    position: "-1.8 1.6 1.4",
+    normal: "0 1 -1",
   },
   {
-    id: 3,
-    title: "湿手触电危险",
-    description: "你刚洗完手，手上还有水，想要使用电器插座...",
+    id: "bathroom-electric",
     room: "卫生间",
-    instruction: "拖动正确的物品来确保安全！",
-    dragItems: [
-      { id: "towel", icon: <Droplets className="w-8 h-8" />, label: "用毛巾擦干手" },
-      { id: "touch", icon: <Hand className="w-8 h-8" />, label: "直接触碰插座" },
+    title: "湿手碰电安全吗？",
+    story: "洗完手的你想立即用吹风机，插座就在水池旁边。",
+    question: "下一步最安全的操作是什么？",
+    tip: "保持干燥和距离，电器远离水汽才安心。",
+    icon: <Droplets className="h-6 w-6 text-purple-600" />, 
+    options: [
+      {
+        id: "dry-hands",
+        label: "先擦干双手并检查插座周围是否干燥",
+        description: "保证手和地面都干燥，再使用电器更安全。",
+      },
+      {
+        id: "use-now",
+        label: "马上插上电源使用",
+        description: "湿手接触电器容易触电，十分危险。",
+      },
     ],
-    correctItemId: "towel",
-    correctFeedback: "非常正确！湿手触碰电器会导致触电！",
-    incorrectFeedback: "危险！湿手触碰电器会触电！",
-    safetyTip: "使用电器前要确保手是干燥的，不要用湿手触碰插座和电器。",
-    bgColor: "from-purple-100 to-pink-200",
+    correctOptionId: "dry-hands",
+    position: "0.5 1.8 -2.4",
+    normal: "0 1 1",
   },
 ]
 
-const rooms = [
-  { name: "玄关", x: "15%", y: "45%", scenarioId: 1 },
-  { name: "厨房", x: "25%", y: "15%", scenarioId: 2 },
-  { name: "卫生间", x: "75%", y: "20%", scenarioId: 3 },
-]
+const TOTAL_STARS = hazards.length * 3
 
-export default function HomeSafetyGame() {
+export default function HomeSafetyGuardian() {
   const [gameState, setGameState] = useState<GameState>("welcome")
-  const [currentLevel, setCurrentLevel] = useState(0)
-  const [score, setScore] = useState(0)
+  const [activeHazard, setActiveHazard] = useState<Hazard | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null)
+  const [attempts, setAttempts] = useState<Record<string, number>>({})
+  const [completedHazards, setCompletedHazards] = useState<string[]>([])
   const [stars, setStars] = useState(0)
-  const [feedback, setFeedback] = useState<FeedbackType>(null)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [draggedItem, setDraggedItem] = useState<string | null>(null)
-  const [isDropZoneActive, setIsDropZoneActive] = useState(false)
-  const [attempts, setAttempts] = useState(0)
-  const [pulsingRooms, setPulsingRooms] = useState<number[]>([])
+  const [score, setScore] = useState(0)
+  const [modelLoaded, setModelLoaded] = useState(false)
 
-  useEffect(() => {
-    if (gameState === "map") {
-      const completedScenarios = currentLevel
-      const availableScenarios = rooms.filter((_, index) => index === completedScenarios).map((room) => room.scenarioId)
-      setPulsingRooms(availableScenarios)
-    }
-  }, [gameState, currentLevel])
+  const progress = useMemo(() => Math.round((stars / TOTAL_STARS) * 100), [stars])
 
-  const handleDragStart = (itemId: string) => {
-    setDraggedItem(itemId)
+  const openHazard = (hazard: Hazard) => {
+    setActiveHazard(hazard)
+    setDialogOpen(true)
+    setFeedback(null)
   }
 
-  const handleDragEnd = () => {
-    setDraggedItem(null)
-    setIsDropZoneActive(false)
-  }
+  const handleAnswer = (optionId: string) => {
+    if (!activeHazard) return
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDropZoneActive(true)
-  }
+    const previousAttempts = attempts[activeHazard.id] ?? 0
+    const nextAttempts = previousAttempts + 1
+    const isCorrect = optionId === activeHazard.correctOptionId
 
-  const handleDragLeave = () => {
-    setIsDropZoneActive(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDropZoneActive(false)
-
-    const scenario = scenarios[currentLevel]
-    const isCorrect = draggedItem === scenario.correctItemId
-
-    setAttempts(attempts + 1)
-    setFeedback(isCorrect ? "correct" : "incorrect")
-    setShowFeedback(true)
+    setAttempts((prev) => ({ ...prev, [activeHazard.id]: nextAttempts }))
 
     if (isCorrect) {
-      const earnedStars = attempts === 0 ? 3 : attempts === 1 ? 2 : 1
-      setStars(stars + earnedStars)
-      setScore(score + 10)
-
-      setTimeout(() => {
-        setShowFeedback(false)
-        setFeedback(null)
-        setAttempts(0)
-        if (currentLevel < scenarios.length - 1) {
-          setCurrentLevel(currentLevel + 1)
-          setGameState("map")
-        } else {
-          setGameState("complete")
-        }
-      }, 2500)
+      const starsEarned = nextAttempts === 1 ? 3 : nextAttempts === 2 ? 2 : 1
+      setFeedback({
+        type: "correct",
+        message: "太棒了！你做出了最安全的选择。",
+        detail: `本题获得 ${starsEarned} 颗星星。`,
+        starsEarned,
+      })
+      if (!completedHazards.includes(activeHazard.id)) {
+        setCompletedHazards((prev) => [...prev, activeHazard.id])
+        setStars((prev) => prev + starsEarned)
+        setScore((prev) => prev + starsEarned * 50)
+      }
     } else {
-      setTimeout(() => {
-        setShowFeedback(false)
-        setFeedback(null)
-      }, 2000)
-    }
-
-    setDraggedItem(null)
-  }
-
-  const resetGame = () => {
-    setGameState("welcome")
-    setCurrentLevel(0)
-    setScore(0)
-    setStars(0)
-    setFeedback(null)
-    setShowFeedback(false)
-    setAttempts(0)
-  }
-
-  const startGame = () => {
-    setGameState("map")
-  }
-
-  const selectRoom = (scenarioId: number) => {
-    const scenarioIndex = scenarios.findIndex((s) => s.id === scenarioId)
-    if (scenarioIndex === currentLevel) {
-      setGameState("playing")
+      setFeedback({
+        type: "incorrect",
+        message: "再想一想，还有更安全的办法！",
+        detail: "提示：先保护好自己，再寻求大人或专业人员的帮助。",
+      })
     }
   }
 
-  if (gameState === "welcome") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full p-8 text-center space-y-6 shadow-xl">
-          <div className="flex justify-center animate-in zoom-in duration-500">
-            <div className="bg-gradient-to-br from-blue-500 to-purple-600 p-6 rounded-full shadow-lg">
-              <Home className="w-16 h-16 text-white" />
-            </div>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-800 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            家庭安全小卫士
+  const handleDialogClose = (open: boolean) => {
+    setDialogOpen(open)
+    if (!open) {
+      setActiveHazard(null)
+      setFeedback(null)
+    }
+  }
+
+  useEffect(() => {
+    if (gameState === "explore" && completedHazards.length === hazards.length) {
+      const timer = setTimeout(() => setGameState("complete"), 1200)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [completedHazards, gameState])
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-purple-50 to-rose-50 pb-16">
+      <Script
+        type="module"
+        src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+        strategy="afterInteractive"
+      />
+
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pt-12 sm:px-8">
+        <header className="text-center">
+          <Badge className="mb-4 rounded-full bg-sky-500 px-4 py-1 text-sm font-semibold text-white">
+            创想守护 · 家庭安全小卫士
+          </Badge>
+          <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">
+            3D 家庭安全守护任务
           </h1>
-          <p className="text-lg text-gray-600 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            通过互动游戏学习重要的家庭安全知识！
+          <p className="mt-3 text-lg text-slate-600 sm:text-xl">
+            在立体房屋中寻找隐患，完成安全挑战，成为家庭的守护者！
           </p>
+        </header>
 
-          <div className="space-y-2 text-left bg-gradient-to-br from-yellow-50 to-orange-50 p-6 rounded-lg border-2 border-yellow-200 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-lg">
-              <Star className="w-5 h-5 text-yellow-500" />
-              游戏特色：
-            </h3>
-            <ul className="text-gray-700 space-y-2 ml-7">
-              <li>🗺️ 在家庭平面图上选择房间开始冒险</li>
-              <li>🎯 拖拽正确的物品来解决安全问题</li>
-              <li>⭐ 根据表现获得1-3颗星星</li>
-              <li>🏆 完成所有关卡解锁安全知识宝典</li>
-            </ul>
-          </div>
-
-          <Button
-            onClick={startGame}
-            size="lg"
-            className="w-full text-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
-          >
-            开始冒险
-          </Button>
-        </Card>
-      </div>
-    )
-  }
-
-  if (gameState === "map") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
-        <Card className="max-w-4xl w-full p-8 space-y-6 shadow-xl">
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-800">选择房间开始挑战</h2>
-              <div className="flex items-center gap-4">
-                <span className="font-semibold flex items-center gap-1 text-yellow-600">
-                  <Star className="w-5 h-5 fill-yellow-500" />
-                  {stars} 星星
-                </span>
-                <span className="font-semibold flex items-center gap-1 text-purple-600">
-                  <Trophy className="w-5 h-5" />
-                  {score} 分
-                </span>
-              </div>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${(currentLevel / scenarios.length) * 100}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-600">
-              进度: {currentLevel} / {scenarios.length} 关卡完成
-            </p>
-          </div>
-
-          <div className="relative bg-white p-4 rounded-lg shadow-inner">
-            <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/40cd694b3cfe0d461b039a224f7939f6-5U1Afr6XVcz4zg3553ZvO2LjFL788k.png"
-              alt="家庭平面图"
-              className="w-full h-auto rounded-lg"
-            />
-
-            {rooms.map((room, index) => {
-              const isCompleted = index < currentLevel
-              const isAvailable = index === currentLevel
-              const isPulsing = pulsingRooms.includes(room.scenarioId)
-
-              return (
-                <button
-                  key={room.scenarioId}
-                  onClick={() => selectRoom(room.scenarioId)}
-                  disabled={!isAvailable}
-                  className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ${
-                    isAvailable ? "cursor-pointer hover:scale-110" : "cursor-not-allowed opacity-50"
-                  } ${isPulsing ? "animate-pulse" : ""}`}
-                  style={{ left: room.x, top: room.y }}
-                >
-                  <div
-                    className={`relative flex flex-col items-center gap-2 p-4 rounded-full shadow-lg ${
-                      isCompleted
-                        ? "bg-green-500"
-                        : isAvailable
-                          ? "bg-gradient-to-br from-yellow-400 to-orange-500"
-                          : "bg-gray-400"
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="w-8 h-8 text-white" />
-                    ) : (
-                      <AlertTriangle className="w-8 h-8 text-white" />
-                    )}
-                  </div>
-                  <div
-                    className={`mt-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                      isCompleted
-                        ? "bg-green-100 text-green-800"
-                        : isAvailable
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {room.name}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
-            <p className="text-center text-gray-700">
-              <span className="font-semibold">💡 提示：</span> 点击闪烁的房间图标开始挑战！
-            </p>
-          </div>
-        </Card>
-      </div>
-    )
-  }
-
-  if (gameState === "playing") {
-    const scenario = scenarios[currentLevel]
-
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${scenario.bgColor} flex items-center justify-center p-4`}>
-        <Card className="max-w-3xl w-full p-8 space-y-6 shadow-xl">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span className="font-semibold">
-                {scenario.room} - 第 {currentLevel + 1} 关
-              </span>
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                  {stars}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Trophy className="w-4 h-4 text-purple-600" />
-                  {score}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="bg-white p-6 rounded-full inline-block shadow-lg">
-              <AlertTriangle className="w-16 h-16 text-orange-500" />
-            </div>
-            <h2 className="text-3xl font-bold text-gray-800">{scenario.title}</h2>
-            <p className="text-gray-700 text-lg">{scenario.description}</p>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur p-6 rounded-lg space-y-4">
-            <p className="text-center text-gray-800 font-semibold text-lg">{scenario.instruction}</p>
-
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`min-h-[200px] border-4 border-dashed rounded-xl flex items-center justify-center transition-all duration-300 ${
-                isDropZoneActive ? "border-blue-500 bg-blue-50 scale-105" : "border-gray-300 bg-gray-50"
-              }`}
-            >
-              {draggedItem ? (
-                <p className="text-xl font-semibold text-blue-600 animate-pulse">松开鼠标放置物品</p>
-              ) : (
-                <p className="text-gray-500 text-center">
-                  <span className="text-2xl block mb-2">👇</span>
-                  拖动下方的物品到这里
+        {gameState === "welcome" && (
+          <section className="mx-auto grid max-w-4xl gap-6 md:grid-cols-[1.1fr_0.9fr]">
+            <Card className="bg-white/80 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl text-slate-800">
+                  <Shield className="h-7 w-7 text-sky-500" />
+                  任务说明
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-slate-600">
+                <p>
+                  房子里藏着 <strong>{hazards.length}</strong> 个常见的家庭安全场景。点击房屋上的闪光标记，聆听故事并选出最安全的做法。
                 </p>
-              )}
-            </div>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <Sparkles className="mt-1 h-5 w-5 text-purple-500" />
+                    <span>首次答对可得 3 颗星，第二次 2 颗，第三次 1 颗。星星越多，守护力越强！</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Compass className="mt-1 h-5 w-5 text-sky-500" />
+                    <span>拖动、旋转 3D 房子，从不同角度观察室内外的潜在危险。</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+                    <span>认真阅读安全提示，把知识带回家中与家人分享。</span>
+                  </li>
+                </ul>
+                <div className="rounded-lg bg-sky-50 p-4 text-sm text-sky-700">
+                  <p className="font-semibold">操作技巧：</p>
+                  <p>鼠标左键旋转，滚轮缩放，按住右键或两指滑动可平移视角。</p>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              {scenario.dragItems.map((item) => (
+            <Card className="flex flex-col justify-between bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-2xl">准备成为守护者了吗？</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 text-sky-50">
+                <div className="rounded-xl bg-white/15 p-4">
+                  <p className="text-sm uppercase tracking-wide text-sky-100">安全装备</p>
+                  <ul className="mt-2 space-y-2 text-base">
+                    <li className="flex items-center gap-2">
+                      <PhoneCall className="h-5 w-5" />记住家长和紧急电话
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Video className="h-5 w-5" />善用智能门铃与监控
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" />冷静思考，拒绝危险操作
+                    </li>
+                  </ul>
+                </div>
+                <Button
+                  size="lg"
+                  className="w-full rounded-full bg-white text-lg font-semibold text-sky-600 hover:bg-slate-100"
+                  onClick={() => setGameState("explore")}
+                >
+                  开始探索 3D 安全屋
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {gameState === "explore" && (
+          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <Card className="bg-white/85 backdrop-blur">
+              <CardHeader className="flex flex-col gap-2">
+                <CardTitle className="text-2xl font-semibold text-slate-800">守护进度</CardTitle>
+                <p className="text-sm text-slate-500">完成全部任务即可解锁安全守护勋章。</p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="rounded-xl bg-gradient-to-r from-sky-100 via-indigo-100 to-rose-100 p-6 shadow-inner">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-sky-700">累计星星</p>
+                      <div className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-800">
+                        <Star className="h-6 w-6 fill-amber-400 text-amber-400" />
+                        {stars} / {TOTAL_STARS}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-purple-700">守护积分</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-800">{score}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-700">完成率</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-800">{progress}%</p>
+                    </div>
+                  </div>
+                  <Progress value={progress} className="mt-4 h-3 bg-white/60" />
+                </div>
+
+                <div className="space-y-4">
+                  {hazards.map((hazard) => {
+                    const isCompleted = completedHazards.includes(hazard.id)
+                    const hazardAttempts = attempts[hazard.id] ?? 0
+                    return (
+                      <div
+                        key={hazard.id}
+                        className={`flex items-start gap-3 rounded-xl border p-4 shadow-sm transition hover:shadow-md ${
+                          isCompleted ? "border-emerald-200 bg-emerald-50/70" : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <div className="rounded-full bg-slate-100 p-2">{hazard.icon}</div>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-semibold text-slate-800">{hazard.title}</h3>
+                            <Badge className="bg-slate-200 text-slate-700">{hazard.room}</Badge>
+                            {isCompleted && (
+                              <Badge className="bg-emerald-500 text-white">
+                                已完成 · {hazardAttempts === 1 ? 3 : hazardAttempts === 2 ? 2 : 1} 颗星
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-600">{hazard.story}</p>
+                          {!isCompleted && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-2"
+                              onClick={() => openHazard(hazard)}
+                            >
+                              立即处理风险
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden border-slate-200 bg-white/85 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-2xl font-semibold text-slate-800">3D 安全屋</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative aspect-square w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
+                  {!modelLoaded && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/80">
+                      <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-300 border-t-sky-500" />
+                      <p className="text-sm font-medium text-slate-600">模型加载中，请稍候…</p>
+                    </div>
+                  )}
+
+                  <model-viewer
+                    src={HOUSE_MODEL_URL}
+                    alt="家庭安全智能屋"
+                    camera-controls
+                    touch-action="pan-y"
+                    shadow-intensity="1"
+                    exposure="0.95"
+                    interaction-prompt="auto"
+                    camera-orbit="35deg 75deg 6m"
+                    field-of-view="45deg"
+                    onLoad={() => setModelLoaded(true)}
+                    style={{ width: "100%", height: "100%", background: "linear-gradient(#ecfeff, #ffffff)" }}
+                  >
+                    {hazards.map((hazard) => {
+                      const isCompleted = completedHazards.includes(hazard.id)
+                      return (
+                        <button
+                          key={hazard.id}
+                          slot={`hotspot-${hazard.id}`}
+                          data-position={hazard.position}
+                          data-normal={hazard.normal}
+                          className={`min-w-[160px] rounded-full border px-3 py-2 text-sm font-medium shadow-lg transition focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                            isCompleted
+                              ? "border-emerald-500 bg-emerald-500/90 text-white"
+                              : "border-sky-500/80 bg-white/90 text-sky-700 hover:bg-sky-50"
+                          }`}
+                          onClick={() => openHazard(hazard)}
+                        >
+                          {hazard.room} · {isCompleted ? "已守护" : "点击处理"}
+                        </button>
+                      )
+                    })}
+                  </model-viewer>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {gameState === "complete" && (
+          <section className="mx-auto grid max-w-4xl gap-6 md:grid-cols-[1.1fr_0.9fr]">
+            <Card className="bg-gradient-to-br from-emerald-100 via-sky-100 to-indigo-100 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-3xl font-bold text-slate-900">
+                  <Award className="h-8 w-8 text-emerald-600" />
+                  恭喜！你成为家庭安全小卫士
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 text-slate-700">
+                <div className="rounded-2xl bg-white/70 p-6 shadow-inner">
+                  <div className="flex flex-wrap items-center justify-between gap-6">
+                    <div>
+                      <p className="text-sm text-slate-500">星星总数</p>
+                      <div className="mt-2 flex items-center gap-3 text-3xl font-bold text-slate-900">
+                        <Star className="h-8 w-8 fill-amber-400 text-amber-400" />
+                        {stars} / {TOTAL_STARS}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">守护积分</p>
+                      <p className="mt-2 text-3xl font-bold text-slate-900">{score}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">完成率</p>
+                      <p className="mt-2 text-3xl font-bold text-slate-900">{progress}%</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-base font-semibold text-slate-800">安全知识复盘：</p>
+                  {hazards.map((hazard) => (
+                    <div key={hazard.id} className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                      <div className="flex items-center gap-2">
+                        {hazard.icon}
+                        <h3 className="text-lg font-semibold text-slate-800">{hazard.room}</h3>
+                      </div>
+                      <p className="mt-2 text-slate-600">{hazard.tip}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl bg-sky-500/90 p-4 text-white">
+                  <p className="text-lg font-semibold">分享建议</p>
+                  <p className="mt-2 text-sm">
+                    和家人一起复盘这些安全守护技巧，检查家里是否存在类似的安全隐患，制定属于你们的家庭安全守护计划。
+                  </p>
+                </div>
+
+                <Button
+                  className="w-full rounded-full bg-slate-900 text-lg font-semibold text-white hover:bg-slate-800"
+                  onClick={() => {
+                    setGameState("explore")
+                    setActiveHazard(null)
+                    setDialogOpen(false)
+                    setFeedback(null)
+                    setAttempts({})
+                    setCompletedHazards([])
+                    setStars(0)
+                    setScore(0)
+                  }}
+                >
+                  再次挑战，巩固守护力
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/85 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl text-slate-800">
+                  <Shield className="h-6 w-6 text-sky-600" />
+                  赛场展示建议
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-slate-600">
+                <p>
+                  演示时可先快速旋转 3D 房屋，介绍每个热点代表的安全场景，再展示答题流程和知识卡片，突出你的创意与主题贴合度。
+                </p>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-sm font-semibold text-slate-700">一分钟问答准备</p>
+                  <ul className="mt-2 list-disc space-y-2 pl-5">
+                    <li>为什么选择这些安全场景？</li>
+                    <li>模型或交互设计的亮点是什么？</li>
+                    <li>如果要扩展作品，还可以加入哪些智能设备？</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+      </main>
+
+      <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
+        <DialogContent className="max-w-xl" showCloseButton>
+          {activeHazard && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-2xl text-slate-900">
+                  {activeHazard.icon}
+                  {activeHazard.title}
+                </DialogTitle>
+                <DialogDescription className="text-base text-slate-600">
+                  {activeHazard.story}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="rounded-xl bg-slate-50 p-4 text-slate-700">
+                <p className="font-semibold">问题：</p>
+                <p>{activeHazard.question}</p>
+              </div>
+
+              <div className="space-y-3">
+                {activeHazard.options.map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => handleAnswer(option.id)}
+                    className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left text-slate-700 transition hover:border-sky-400 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    <p className="text-base font-semibold text-slate-800">{option.label}</p>
+                    <p className="mt-1 text-sm text-slate-600">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+
+              {feedback && (
                 <div
-                  key={item.id}
-                  draggable
-                  onDragStart={() => handleDragStart(item.id)}
-                  onDragEnd={handleDragEnd}
-                  className={`bg-white border-2 border-gray-300 rounded-lg p-6 cursor-move hover:border-blue-500 hover:shadow-lg transition-all duration-300 flex flex-col items-center gap-3 ${
-                    draggedItem === item.id ? "opacity-50 scale-95" : "hover:scale-105"
+                  className={`flex items-start gap-3 rounded-xl border p-4 ${
+                    feedback.type === "correct"
+                      ? "border-emerald-300 bg-emerald-50"
+                      : "border-rose-300 bg-rose-50"
                   }`}
                 >
-                  <div className="text-blue-600">{item.icon}</div>
-                  <p className="text-center font-semibold text-gray-800">{item.label}</p>
+                  {feedback.type === "correct" ? (
+                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-6 w-6 text-rose-500" />
+                  )}
+                  <div>
+                    <p className="font-semibold text-slate-800">{feedback.message}</p>
+                    <p className="text-sm text-slate-600">{feedback.detail}</p>
+                    {feedback.type === "correct" && activeHazard.tip && (
+                      <p className="mt-2 text-sm text-emerald-700">安全提示：{activeHazard.tip}</p>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {showFeedback && (
-            <div
-              className={`p-6 rounded-lg flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
-                feedback === "correct" ? "bg-green-100 border-4 border-green-500" : "bg-red-100 border-4 border-red-500"
-              }`}
-            >
-              {feedback === "correct" ? (
-                <>
-                  <CheckCircle2 className="w-10 h-10 text-green-600 flex-shrink-0 animate-in zoom-in" />
-                  <div>
-                    <p className="text-green-800 font-bold text-lg">{scenario.correctFeedback}</p>
-                    <p className="text-green-700 text-sm mt-1">
-                      获得 {attempts === 0 ? "3" : attempts === 1 ? "2" : "1"} 颗星星！
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <XCircle className="w-10 h-10 text-red-600 flex-shrink-0 animate-in zoom-in" />
-                  <div>
-                    <p className="text-red-800 font-bold text-lg">{scenario.incorrectFeedback}</p>
-                    <p className="text-red-700 text-sm mt-1">再试一次！</p>
-                  </div>
-                </>
               )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => handleDialogClose(false)}>
+                  返回继续探索
+                </Button>
+                {feedback?.type === "correct" && (
+                  <Button onClick={() => handleDialogClose(false)} className="bg-sky-500 text-white hover:bg-sky-600">
+                    收下知识，前往下一个热点
+                  </Button>
+                )}
+              </DialogFooter>
             </div>
           )}
-
-          <div className="flex justify-center">
-            <Button onClick={() => setGameState("map")} variant="outline" className="border-2">
-              返回地图
-            </Button>
-          </div>
-        </Card>
-      </div>
-    )
-  }
-
-  // Complete State
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
-      <Card className="max-w-2xl w-full p-8 space-y-6 shadow-xl">
-        <div className="text-center space-y-4">
-          <div className="flex justify-center animate-in zoom-in duration-500">
-            <div className="bg-gradient-to-br from-yellow-400 to-orange-500 p-8 rounded-full shadow-xl">
-              <Trophy className="w-24 h-24 text-white" />
-            </div>
-          </div>
-          <h2 className="text-4xl font-bold text-gray-800 animate-in fade-in slide-in-from-bottom-4">恭喜通关！</h2>
-
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-8 rounded-xl shadow-lg">
-            <div className="flex justify-center gap-2 mb-4">
-              {Array.from({ length: stars }).map((_, i) => (
-                <Star
-                  key={i}
-                  className="w-8 h-8 fill-yellow-300 text-yellow-300 animate-in zoom-in"
-                  style={{ animationDelay: `${i * 100}ms` }}
-                />
-              ))}
-            </div>
-            <p className="text-3xl font-bold">{stars} 颗星星</p>
-            <p className="text-2xl font-bold mt-2">总积分: {score} 分</p>
-            <p className="text-lg mt-3">你已经成为家庭安全小卫士！</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-yellow-500" />
-            安全知识宝典
-          </h3>
-          <div className="space-y-3">
-            {scenarios.map((scenario, index) => (
-              <div
-                key={index}
-                className="bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-lg border-2 border-blue-200"
-              >
-                <p className="text-gray-700">
-                  <span className="font-bold text-blue-600">{scenario.room}：</span>
-                  {scenario.safetyTip}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 p-6 rounded-lg border-2 border-yellow-200 space-y-3">
-            <h4 className="font-bold text-gray-800 text-lg">更多安全提示：</h4>
-            <ul className="space-y-2 text-gray-700">
-              <li className="flex items-start gap-2">
-                <span className="text-lg">🏠</span>
-                <span>独自在家时要锁好门窗，不给陌生人开门</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-lg">🔥</span>
-                <span>不要玩火，发现火情及时告诉大人或拨打119</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-lg">⚡</span>
-                <span>不要用湿手触碰电器，不要在插座上插太多电器</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-lg">🚨</span>
-                <span>记住家长电话和紧急联系方式</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <Button
-          onClick={resetGame}
-          size="lg"
-          className="w-full text-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300"
-        >
-          再玩一次
-        </Button>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
