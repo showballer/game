@@ -258,31 +258,46 @@ export default function HomeSafetyGuardian() {
     const viewer = modelViewerRef.current
     if (!viewer) return
 
-    const extendedViewer = viewer as HTMLElement & {
-      modelIsVisible?: boolean
-      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
-      removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+    const handleLoad = () => {
+      setModelLoaded(true)
     }
-
-    const handleLoad = () => setModelLoaded(true)
-    const handleVisibilityChange = (event: Event & { detail?: { visible?: boolean } }) => {
-      if (event.detail?.visible) {
+    
+    const handleProgress = (event: Event & { detail?: { totalProgress?: number } }) => {
+      if (event.detail?.totalProgress === 1) {
         setModelLoaded(true)
       }
     }
 
-    if (extendedViewer.modelIsVisible) {
+    const handleModelLoad = () => {
       setModelLoaded(true)
     }
 
-    extendedViewer.addEventListener("load", handleLoad)
-    extendedViewer.addEventListener("model-visibility", handleVisibilityChange)
+    viewer.addEventListener("load", handleLoad)
+    viewer.addEventListener("progress", handleProgress)
+    viewer.addEventListener("model-visibility", handleModelLoad)
+
+    // 检查是否已经加载完成 - 增加检查次数和时间间隔
+    const checkInterval = setInterval(() => {
+      const mvElement = viewer as any
+      if (mvElement.loaded || mvElement.modelIsVisible || mvElement.$scene) {
+        setModelLoaded(true)
+        clearInterval(checkInterval)
+      }
+    }, 200)
+
+    // 兜底：3秒后强制显示
+    const fallbackTimeout = setTimeout(() => {
+      setModelLoaded(true)
+    }, 3000)
 
     return () => {
-      extendedViewer.removeEventListener("load", handleLoad)
-      extendedViewer.removeEventListener("model-visibility", handleVisibilityChange)
+      viewer.removeEventListener("load", handleLoad)
+      viewer.removeEventListener("progress", handleProgress)
+      viewer.removeEventListener("model-visibility", handleModelLoad)
+      clearInterval(checkInterval)
+      clearTimeout(fallbackTimeout)
     }
-  }, [modelViewerRef])
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-purple-50 to-rose-50 pb-16">
@@ -292,7 +307,7 @@ export default function HomeSafetyGuardian() {
         strategy="afterInteractive"
       />
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pt-12 sm:px-8">
+      <main className="w-full flex flex-col gap-8 p-6">
         <header className="text-center">
           <Badge className="mb-4 rounded-full bg-sky-500 px-4 py-1 text-sm font-semibold text-white">
             创想守护 · 家庭安全小卫士
@@ -371,8 +386,8 @@ export default function HomeSafetyGuardian() {
         )}
 
         {gameState === "explore" && (
-          <section className="grid gap-6 lg:grid-cols-[minmax(280px,0.3fr)_minmax(520px,0.7fr)]">
-            <Card className="bg-white/85 backdrop-blur">
+          <section className="grid gap-6 lg:grid-cols-[380px_1fr]">
+            <Card className="bg-white/85 backdrop-blur overflow-auto">
               <CardHeader className="flex flex-col gap-2">
                 <CardTitle className="text-2xl font-semibold text-slate-800">守护进度</CardTitle>
                 <p className="text-sm text-slate-500">完成全部任务即可解锁安全守护勋章。</p>
@@ -441,18 +456,12 @@ export default function HomeSafetyGuardian() {
             </Card>
 
             <Card className="flex h-full flex-col overflow-hidden border-slate-200 bg-white/85 backdrop-blur">
-              <CardHeader>
+              <CardHeader className="pb-4">
                 <CardTitle className="text-2xl font-semibold text-slate-800">3D 安全屋</CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 p-6">
-                <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
-                  {!modelLoaded && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/80">
-                      <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-300 border-t-sky-500" />
-                      <p className="text-sm font-medium text-slate-600">模型加载中，请稍候…</p>
-                    </div>
-                  )}
-
+              <CardContent className="flex-1 p-6 pt-0">
+                <div className="relative h-full w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
+                  {/* @ts-expect-error - model-viewer is a custom element */}
                   <model-viewer
                     ref={modelViewerRef}
                     src={HOUSE_MODEL_URL}
@@ -462,8 +471,12 @@ export default function HomeSafetyGuardian() {
                     shadow-intensity="1"
                     exposure="0.95"
                     interaction-prompt="auto"
-                    camera-orbit="35deg 75deg 6m"
+                    camera-orbit="35deg 75deg 0m"
                     field-of-view="45deg"
+                    min-camera-orbit="auto auto 3m"
+                    max-camera-orbit="auto auto 10m"
+                    loading="eager"
+                    reveal="auto"
                     style={{ width: "100%", height: "100%", background: "linear-gradient(#ecfeff, #ffffff)" }}
                   >
                     {hazards.map((hazard) => {
@@ -474,34 +487,36 @@ export default function HomeSafetyGuardian() {
                           slot={`hotspot-${hazard.id}`}
                           data-position={hazard.position}
                           data-normal={hazard.normal}
-                          className={`group relative flex min-w-[190px] items-center gap-3 rounded-full border px-4 py-2 text-left text-sm font-semibold shadow-lg transition focus:outline-none focus:ring-2 focus:ring-sky-500 ${
-                            isCompleted
-                              ? "border-emerald-400/80 bg-emerald-500/95 text-white"
-                              : "border-sky-400/80 bg-white/95 text-slate-800 hover:bg-sky-50"
-                          }`}
+                          className="group relative flex items-center justify-center cursor-pointer focus:outline-none"
                           onClick={() => openHazard(hazard)}
+                          style={{ width: "40px", height: "40px" }}
                         >
-                          <span className="relative flex h-9 w-9 items-center justify-center">
-                            <span
-                              className={`absolute inline-flex h-9 w-9 animate-ping rounded-full opacity-70 ${
-                                isCompleted ? "bg-emerald-300/70" : "bg-sky-400/70"
-                              }`}
-                            />
-                            <span
-                              className={`relative inline-flex h-4 w-4 rounded-full ${
-                                isCompleted ? "bg-white" : "bg-sky-600"
-                              }`}
-                            />
-                          </span>
-                          <span className="flex flex-col leading-tight">
-                            <span>{hazard.room}</span>
-                            <span className="text-xs font-medium opacity-80">
-                              {isCompleted ? "已守护" : "点击处理"}
-                            </span>
+                          {/* 闪烁动画外圈 */}
+                          <span
+                            className={`absolute inline-flex h-10 w-10 animate-ping rounded-full opacity-60 ${
+                              isCompleted ? "bg-emerald-400" : "bg-sky-500"
+                            }`}
+                          />
+                          {/* 中间圆点 */}
+                          <span
+                            className={`relative inline-flex h-5 w-5 rounded-full border-2 border-white shadow-lg ${
+                              isCompleted ? "bg-emerald-500" : "bg-sky-600"
+                            }`}
+                          />
+                          {/* 悬停时显示的标签 */}
+                          <span
+                            className={`absolute left-12 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity ${
+                              isCompleted
+                                ? "border-emerald-400/80 bg-emerald-500/95 text-white"
+                                : "border-sky-400/80 bg-white/95 text-slate-800"
+                            }`}
+                          >
+                            {hazard.room} · {isCompleted ? "已守护" : "点击处理"}
                           </span>
                         </button>
                       )
                     })}
+                    {/* @ts-expect-error - model-viewer is a custom element */}
                   </model-viewer>
                 </div>
               </CardContent>
