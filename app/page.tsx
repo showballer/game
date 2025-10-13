@@ -258,16 +258,29 @@ export default function HomeSafetyGuardian() {
     const viewer = modelViewerRef.current
     if (!viewer) return
 
-    const handleLoad = () => setModelLoaded(true)
-
-    if ((viewer as HTMLElement & { modelIsVisible?: boolean }).modelIsVisible) {
-      setModelLoaded(true)
-    } else {
-      viewer.addEventListener("load", handleLoad)
+    const extendedViewer = viewer as HTMLElement & {
+      modelIsVisible?: boolean
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+      removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
     }
 
+    const handleLoad = () => setModelLoaded(true)
+    const handleVisibilityChange = (event: Event & { detail?: { visible?: boolean } }) => {
+      if (event.detail?.visible) {
+        setModelLoaded(true)
+      }
+    }
+
+    if (extendedViewer.modelIsVisible) {
+      setModelLoaded(true)
+    }
+
+    extendedViewer.addEventListener("load", handleLoad)
+    extendedViewer.addEventListener("model-visibility", handleVisibilityChange)
+
     return () => {
-      viewer.removeEventListener("load", handleLoad)
+      extendedViewer.removeEventListener("load", handleLoad)
+      extendedViewer.removeEventListener("model-visibility", handleVisibilityChange)
     }
   }, [modelViewerRef])
 
@@ -358,7 +371,7 @@ export default function HomeSafetyGuardian() {
         )}
 
         {gameState === "explore" && (
-          <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <section className="grid gap-6 lg:grid-cols-[minmax(280px,0.3fr)_minmax(520px,0.7fr)]">
             <Card className="bg-white/85 backdrop-blur">
               <CardHeader className="flex flex-col gap-2">
                 <CardTitle className="text-2xl font-semibold text-slate-800">守护进度</CardTitle>
@@ -431,7 +444,7 @@ export default function HomeSafetyGuardian() {
               <CardHeader>
                 <CardTitle className="text-2xl font-semibold text-slate-800">3D 安全屋</CardTitle>
               </CardHeader>
-              <CardContent className="flex-1">
+              <CardContent className="flex-1 p-6">
                 <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
                   {!modelLoaded && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/80">
@@ -461,14 +474,31 @@ export default function HomeSafetyGuardian() {
                           slot={`hotspot-${hazard.id}`}
                           data-position={hazard.position}
                           data-normal={hazard.normal}
-                          className={`min-w-[160px] rounded-full border px-3 py-2 text-sm font-medium shadow-lg transition focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                          className={`group relative flex min-w-[190px] items-center gap-3 rounded-full border px-4 py-2 text-left text-sm font-semibold shadow-lg transition focus:outline-none focus:ring-2 focus:ring-sky-500 ${
                             isCompleted
-                              ? "border-emerald-500 bg-emerald-500/90 text-white"
-                              : "border-sky-500/80 bg-white/90 text-sky-700 hover:bg-sky-50"
+                              ? "border-emerald-400/80 bg-emerald-500/95 text-white"
+                              : "border-sky-400/80 bg-white/95 text-slate-800 hover:bg-sky-50"
                           }`}
                           onClick={() => openHazard(hazard)}
                         >
-                          {hazard.room} · {isCompleted ? "已守护" : "点击处理"}
+                          <span className="relative flex h-9 w-9 items-center justify-center">
+                            <span
+                              className={`absolute inline-flex h-9 w-9 animate-ping rounded-full opacity-70 ${
+                                isCompleted ? "bg-emerald-300/70" : "bg-sky-400/70"
+                              }`}
+                            />
+                            <span
+                              className={`relative inline-flex h-4 w-4 rounded-full ${
+                                isCompleted ? "bg-white" : "bg-sky-600"
+                              }`}
+                            />
+                          </span>
+                          <span className="flex flex-col leading-tight">
+                            <span>{hazard.room}</span>
+                            <span className="text-xs font-medium opacity-80">
+                              {isCompleted ? "已守护" : "点击处理"}
+                            </span>
+                          </span>
                         </button>
                       )
                     })}
