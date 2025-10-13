@@ -24,8 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 
-const HOUSE_MODEL_URL =
-  "https://mweb-showballer.oss-cn-shanghai.aliyuncs.com/%E6%96%87%E6%A1%A3/fangzi.glb"
+const HOUSE_MODEL_URL = "/api/house-model"
 
 type GameState = "welcome" | "explore" | "complete"
 
