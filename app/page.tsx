@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Script from "next/script"
 import {
   AlertTriangle,
@@ -34,6 +34,25 @@ type HazardOption = {
   description: string
 }
 
+type CameraOrbit = {
+  theta: string
+  phi: string
+  radius: string
+}
+
+type ModelViewerElement = HTMLElement & {
+  cameraTarget?: string
+  interactionPrompt?: string
+  interpolateCameraOrbit?: (
+    theta: string,
+    phi: string,
+    radius: string,
+    target: string,
+    options?: { duration?: number; easing?: string }
+  ) => void
+  jumpCameraToGoal?: () => void
+}
+
 type Hazard = {
   id: string
   room: string
@@ -46,6 +65,8 @@ type Hazard = {
   correctOptionId: string
   position: string
   normal: string
+  cameraTarget: string
+  cameraOrbit: CameraOrbit
 }
 
 type FeedbackState = {
@@ -79,6 +100,8 @@ const hazards: Hazard[] = [
     correctOptionId: "verify",
     position: "1.1 1.4 3.2",
     normal: "0 1 -1",
+    cameraTarget: "1.1m 1.4m 3.2m",
+    cameraOrbit: { theta: "30deg", phi: "70deg", radius: "4.2m" },
   },
   {
     id: "kitchen-fire",
@@ -103,6 +126,8 @@ const hazards: Hazard[] = [
     correctOptionId: "close-valve",
     position: "-1.8 1.6 1.4",
     normal: "0 1 -1",
+    cameraTarget: "-1.8m 1.5m 1.4m",
+    cameraOrbit: { theta: "120deg", phi: "65deg", radius: "4m" },
   },
   {
     id: "bathroom-electric",
@@ -127,6 +152,8 @@ const hazards: Hazard[] = [
     correctOptionId: "dry-hands",
     position: "0.5 1.8 -2.4",
     normal: "0 1 1",
+    cameraTarget: "0.5m 1.7m -2.4m",
+    cameraOrbit: { theta: "210deg", phi: "60deg", radius: "3.8m" },
   },
 ]
 
@@ -142,10 +169,39 @@ export default function HomeSafetyGuardian() {
   const [stars, setStars] = useState(0)
   const [score, setScore] = useState(0)
   const [modelLoaded, setModelLoaded] = useState(false)
+  const modelViewerRef = useRef<ModelViewerElement | null>(null)
+
+  const focusHazard = (hazard: Hazard) => {
+    const viewer = modelViewerRef.current
+    if (!viewer) return
+
+    const { cameraOrbit, cameraTarget } = hazard
+    if (viewer.interactionPrompt !== undefined) {
+      viewer.interactionPrompt = "none"
+    }
+    viewer.setAttribute("camera-target", cameraTarget)
+    viewer.setAttribute(
+      "camera-orbit",
+      `${cameraOrbit.theta} ${cameraOrbit.phi} ${cameraOrbit.radius}`
+    )
+
+    if (viewer.interpolateCameraOrbit) {
+      viewer.interpolateCameraOrbit(
+        cameraOrbit.theta,
+        cameraOrbit.phi,
+        cameraOrbit.radius,
+        cameraTarget,
+        { duration: 1200, easing: "ease-in-out" }
+      )
+    } else {
+      viewer.jumpCameraToGoal?.()
+    }
+  }
 
   const progress = useMemo(() => Math.round((stars / TOTAL_STARS) * 100), [stars])
 
   const openHazard = (hazard: Hazard) => {
+    focusHazard(hazard)
     setActiveHazard(hazard)
     setDialogOpen(true)
     setFeedback(null)
@@ -197,6 +253,23 @@ export default function HomeSafetyGuardian() {
     }
     return undefined
   }, [completedHazards, gameState])
+
+  useEffect(() => {
+    const viewer = modelViewerRef.current
+    if (!viewer) return
+
+    const handleLoad = () => setModelLoaded(true)
+
+    if ((viewer as HTMLElement & { modelIsVisible?: boolean }).modelIsVisible) {
+      setModelLoaded(true)
+    } else {
+      viewer.addEventListener("load", handleLoad)
+    }
+
+    return () => {
+      viewer.removeEventListener("load", handleLoad)
+    }
+  }, [modelViewerRef])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-purple-50 to-rose-50 pb-16">
@@ -285,7 +358,7 @@ export default function HomeSafetyGuardian() {
         )}
 
         {gameState === "explore" && (
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
             <Card className="bg-white/85 backdrop-blur">
               <CardHeader className="flex flex-col gap-2">
                 <CardTitle className="text-2xl font-semibold text-slate-800">守护进度</CardTitle>
@@ -354,12 +427,12 @@ export default function HomeSafetyGuardian() {
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden border-slate-200 bg-white/85 backdrop-blur">
+            <Card className="flex h-full flex-col overflow-hidden border-slate-200 bg-white/85 backdrop-blur">
               <CardHeader>
                 <CardTitle className="text-2xl font-semibold text-slate-800">3D 安全屋</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="relative aspect-square w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
+              <CardContent className="flex-1">
+                <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-2xl border bg-slate-200 shadow-inner">
                   {!modelLoaded && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/80">
                       <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-300 border-t-sky-500" />
@@ -368,6 +441,7 @@ export default function HomeSafetyGuardian() {
                   )}
 
                   <model-viewer
+                    ref={modelViewerRef}
                     src={HOUSE_MODEL_URL}
                     alt="家庭安全智能屋"
                     camera-controls
@@ -377,7 +451,6 @@ export default function HomeSafetyGuardian() {
                     interaction-prompt="auto"
                     camera-orbit="35deg 75deg 6m"
                     field-of-view="45deg"
-                    onLoad={() => setModelLoaded(true)}
                     style={{ width: "100%", height: "100%", background: "linear-gradient(#ecfeff, #ffffff)" }}
                   >
                     {hazards.map((hazard) => {
