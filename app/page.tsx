@@ -79,7 +79,7 @@ type FeedbackState = {
 const hazards: Hazard[] = [
   {
     id: "door-safety",
-    room: "玄关",
+    room: "客厅",
     title: "陌生人敲门怎么办？",
     story: "你一个人在家，门铃突然响了，对方说要进屋检查水电……",
     question: "此时你应该怎么做最安全？",
@@ -98,10 +98,12 @@ const hazards: Hazard[] = [
       },
     ],
     correctOptionId: "verify",
-    position: "1.1 1.4 3.2",
-    normal: "0 1 -1",
-    cameraTarget: "1.1m 1.4m 3.2m",
-    cameraOrbit: { theta: "30deg", phi: "70deg", radius: "4.2m" },
+    // ✅ 新坐标（拾取到的客厅点）
+    position: "0.60 0.03 0.41",
+    normal: "0 1 0",
+    cameraTarget: "0.60m 0.03m 0.41m",
+    // 相机稍微靠上俯视一点，半径设为 3.8m 左右即可
+    cameraOrbit: { theta: "35deg", phi: "65deg", radius: "3.8m" },
   },
   {
     id: "kitchen-fire",
@@ -124,10 +126,11 @@ const hazards: Hazard[] = [
       },
     ],
     correctOptionId: "close-valve",
-    position: "-1.8 1.6 1.4",
-    normal: "0 1 -1",
-    cameraTarget: "-1.8m 1.5m 1.4m",
-    cameraOrbit: { theta: "120deg", phi: "65deg", radius: "4m" },
+    // ✅ 新坐标（拾取到的厨房点）
+    position: "1.28 0.08 0.28",
+    normal: "0 1 0",
+    cameraTarget: "1.28m 0.08m 0.28m",
+    cameraOrbit: { theta: "30deg", phi: "70deg", radius: "4m" },
   },
   {
     id: "bathroom-electric",
@@ -150,10 +153,11 @@ const hazards: Hazard[] = [
       },
     ],
     correctOptionId: "dry-hands",
-    position: "0.5 1.8 -2.4",
-    normal: "0 1 1",
-    cameraTarget: "0.5m 1.7m -2.4m",
-    cameraOrbit: { theta: "210deg", phi: "60deg", radius: "3.8m" },
+    // ✅ 新坐标（拾取到的卫生间点）
+    position: "0.91 0.08 -0.09",
+    normal: "0 1 0",
+    cameraTarget: "0.91m 0.08m -0.09m",
+    cameraOrbit: { theta: "210deg", phi: "60deg", radius: "3.6m" },
   },
 ]
 
